@@ -1,0 +1,36 @@
+{
+  "categories": [
+    {
+      "id": "cat1",
+      "name": "Electronics",
+      "imageUrl": "https://example.com/electronics.jpg"
+    },
+    {
+      "id": "cat2",
+      "name": "Clothing",
+      "imageUrl": "https://example.com/clothing.jpg"
+    }
+  ],
+  "products": [
+    {
+      "id": "prod1",
+      "name": "Smartphone X",
+      "description": "Latest smartphone with advanced features",
+      "price": 699.99,
+      "weight": "0.5kg",
+      "category": "cat1",
+      "imageUrl": "https://example.com/phone.jpg",
+      "createdAt": "2023-01-01"
+    },
+    {
+      "id": "prod2",
+      "name": "Wireless Headphones",
+      "description": "Noise cancelling wireless headphones",
+      "price": 199.99,
+      "weight": "0.3kg",
+      "category": "cat1",
+      "imageUrl": "https://example.com/headphones.jpg",
+      "createdAt": "2023-01-02"
+    }
+  ]
+}

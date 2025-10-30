@@ -1,0 +1,131 @@
+{
+  "admins": {
+    "admin1": {
+      "email": "selva.vsundaram@gmail.com",
+      "password": "$2a$10$hashedpassword", // Store only hashed passwords
+      "fullName": "John Doe",
+      "mobileNumber": "+1234567890",
+      "address": {
+        "street": "123 Main St",
+        "city": "New York",
+        "state": "NY",
+        "zipCode": "10001",
+        "country": "USA"
+      },
+      "companyName": "Best Products Inc.",
+      "companyLogo": "https://storage.googleapis.com/your-bucket/company-logo.png",
+      "isActive": true,
+      "createdAt": "2023-01-15T10:30:00Z",
+      "lastLogin": "2023-06-20T08:45:00Z"
+    },
+    "admin2": {
+      "email": "manager@example.com",
+      "password": "$2a$10$hashedpassword",
+      "fullName": "Jane Smith",
+      "mobileNumber": "+1987654321",
+      "address": {
+        "street": "456 Oak Ave",
+        "city": "Los Angeles",
+        "state": "CA",
+        "zipCode": "90001",
+        "country": "USA"
+      },
+      "companyName": "Best Products Inc.",
+      "companyLogo": "https://storage.googleapis.com/your-bucket/company-logo.png",
+      "isActive": true,
+      "createdAt": "2023-02-20T14:15:00Z",
+      "lastLogin": "2023-06-18T11:20:00Z"
+    }
+  },
+  
+  "categories": {
+    "cat1": {
+      "categoryId": "cat1",
+      "categoryName": "Electronics",
+      "isActive": true,
+      "createdAt": "2023-01-10T09:00:00Z",
+      "createdBy": "admin1"
+    },
+    "cat2": {
+      "categoryId": "cat2",
+      "categoryName": "Groceries",
+      "isActive": true,
+      "createdAt": "2023-01-10T09:05:00Z",
+      "createdBy": "admin1"
+    },
+    "cat3": {
+      "categoryId": "cat3",
+      "categoryName": "Clothing",
+      "isActive": true,
+      "createdAt": "2023-01-11T10:15:00Z",
+      "createdBy": "admin2"
+    }
+  },
+  
+  "products": {
+    "prod1": {
+      "productId": "prod1",
+      "name": "Smartphone X",
+      "categoryId": "cat1",
+      "categoryName": "Electronics",
+      "description": "Latest smartphone with 128GB storage and 48MP camera",
+      "expiryDate": "2025-12-31",
+      "standardPrice": 799.99,
+      "offerPrice": 699.99,
+      "productImage": "https://storage.googleapis.com/your-bucket/smartphone-x.jpg",
+      "isActive": true,
+      "createdAt": "2023-03-15T11:30:00Z",
+      "createdBy": "admin1",
+      "stockQuantity": 50,
+      "tags": ["mobile", "smartphone", "electronics"]
+    },
+    "prod2": {
+      "productId": "prod2",
+      "name": "Organic Apples",
+      "categoryId": "cat2",
+      "categoryName": "Groceries",
+      "description": "Fresh organic apples from local farm",
+      "expiryDate": "2023-07-30",
+      "standardPrice": 2.99,
+      "offerPrice": 1.99,
+      "productImage": "https://storage.googleapis.com/your-bucket/organic-apples.jpg",
+      "isActive": true,
+      "createdAt": "2023-04-01T08:45:00Z",
+      "createdBy": "admin2",
+      "stockQuantity": 200,
+      "tags": ["fruits", "organic", "healthy"]
+    },
+    "prod3": {
+      "productId": "prod3",
+      "name": "Men's T-Shirt",
+      "categoryId": "cat3",
+      "categoryName": "Clothing",
+      "description": "Cotton t-shirt available in multiple colors and sizes",
+      "expiryDate": null,
+      "standardPrice": 24.99,
+      "offerPrice": 19.99,
+      "productImage": "https://storage.googleapis.com/your-bucket/mens-tshirt.jpg",
+      "isActive": true,
+      "createdAt": "2023-05-10T14:20:00Z",
+      "createdBy": "admin1",
+      "stockQuantity": 150,
+      "tags": ["clothing", "tshirt", "men"]
+    },
+    "prod4": {
+      "productId": "prod4",
+      "name": "Wireless Headphones",
+      "categoryId": "cat1",
+      "categoryName": "Electronics",
+      "description": "Noise cancelling wireless headphones with 30hr battery",
+      "expiryDate": "2026-06-30",
+      "standardPrice": 199.99,
+      "offerPrice": 149.99,
+      "productImage": "https://storage.googleapis.com/your-bucket/wireless-headphones.jpg",
+      "isActive": true,
+      "createdAt": "2023-06-05T10:10:00Z",
+      "createdBy": "admin2",
+      "stockQuantity": 75,
+      "tags": ["audio", "headphones", "wireless"]
+    }
+  }
+}
