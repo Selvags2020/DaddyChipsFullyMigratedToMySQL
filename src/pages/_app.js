@@ -38,11 +38,7 @@ function MyApp({ Component, pageProps }) {
         <meta name="mobile-web-app-capable" content="yes"></meta>
 <meta name="apple-mobile-web-app-capable" content="yes"></meta>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"></meta>
-         {/* <link 
-          rel="icon" 
-          href="https://res.cloudinary.com/djqkpu1rf/image/upload/w_180,c_scale/v1751975046/ecom_products/aanava_logo_f2ggau.jpg" 
-          type="image/jpg"
-        /> */}
+        
         {/* For Apple devices */}
        
       </Head>

@@ -62,9 +62,7 @@ export default function Navbar() {
     // { href: 'https://rsofttech.vercel.app', text: 'Contact Developer' }
   ];
 
-  const logoUrl = 'https://res.cloudinary.com/djqkpu1rf/image/upload/w_180,c_scale/v1751975046/ecom_products/aanava_logo_f2ggau.jpg';
-  const isAllProductsPage = router.pathname === '/products/all';
-
+   
   return (
     <nav className="bg-[#0c6bdb] shadow-lg sticky top-0 z-50 overflow-x-hidden">
 

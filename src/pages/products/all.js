@@ -7,6 +7,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
+import allImg from './all.png';
 import {
   Container,
   Card,
@@ -412,7 +413,7 @@ export default function ProductPage() {
   const allCategory = {
     category_id: 'all',
     category_name: 'All',
-    img_url: 'https://res.cloudinary.com/djqkpu1rf/image/upload/v1752286090/Copilot_20250712_073735_appfqm.png'
+    img_url: 'http:\/\/localhost\/DaddyChipsAPI\/uploads\/all.png'
   };
 
   // Calculate total items in cart
