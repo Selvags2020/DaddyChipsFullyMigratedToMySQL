@@ -1,12 +1,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '../lib/firebase';
-import { ref, get } from 'firebase/database';
-import { database } from '../lib/firebase';
-import AdminLayout from '../components/AdminLayout'
 import { useAuth } from '../context/AuthContext';
-import AdminDashboard from './admin/AdminDashboard';
+
+import { API_URLS } from '../constants'
+
+const API_BASE_URL = API_URLS.BaseURL;
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -19,82 +17,105 @@ export default function Login() {
   const router = useRouter();
   const { setCurrentUser } = useAuth();
 
-const handleLogin = async (e) => {
-  e.preventDefault();
-  setLoading(true);
-  setError('');
+  const testServerConnection = async () => {
+    try {
+      const testResponse = await fetch(`${API_BASE_URL}login.php`, {
+        method: 'OPTIONS'
+      });
+      return testResponse.ok;
+    } catch (error) {
+      console.error('Server connection test failed:', error);
+      return false;
+    }
+  };
 
-  try {
-    // 1. First authenticate with Firebase Auth
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
-    // 2. Now access the specific user's data (more secure than reading all users)
-    const userRef = ref(database, `users/${user.uid}`);
-    const snapshot = await get(userRef);
-
-    if (snapshot.exists()) {
-      const userData = snapshot.val();
-
-      console.log(userData)
+    try {
+      console.log('Testing server connection...');
+      const isServerReady = await testServerConnection();
       
-      if (!userData.isActive) {
-        throw new Error('Your account is inactive. Please contact support.');
+      if (!isServerReady) {
+        throw new Error('Cannot connect to server. Please make sure your PHP server (XAMPP/WAMP) is running.');
       }
 
-      // Store minimal user data
-
-      const userObj = {
-        uid: user.uid,
-        email: user.email,
-        role: userData.address?.Role,
-        name: userData.fullName
-      };
-      localStorage.setItem('currentUser', JSON.stringify(userObj));
-      setCurrentUser(userObj);
-
+      console.log('Attempting login with:', { email });
       
+      const response = await fetch(`${API_BASE_URL}login.php`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+        // Remove credentials for now to simplify
+      });
 
-      // Redirect based on role
-      const redirectPath = userData.address?.Role === 'Admin' 
-        ? '/admin/AdminDashboard'
-        : '/dashboard';
-     router.push(redirectPath);
-    } else {
-      throw new Error('User data not found');
-    }
-  } catch (err) {
-    console.error("Login error:", err);
-    
-    // Handle specific Firebase auth errors
-    let errorMessage = 'Login failed. Please try again.';
-    
-    switch (err.code) {
-      case 'auth/invalid-email':
-        errorMessage = 'Invalid email address format';
-        break;
-      case 'auth/user-disabled':
-        errorMessage = 'This account has been disabled';
-        break;
-      case 'auth/user-not-found':
-      case 'auth/wrong-password':
-      case 'auth/invalid-credential':
+      console.log('Response received, status:', response.status);
+
+      // Handle non-JSON responses
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response:', text);
+        throw new Error('Server returned invalid response. Please check the PHP configuration.');
+      }
+
+      const data = await response.json();
+      console.log('Response data:', data);
+
+      if (data.success) {
+        // Store user data in localStorage and context
+        const userObj = {
+          uid: data.user.uid,
+          email: data.user.email,
+          role: data.user.role,
+          name: data.user.name,
+          last_login: data.user.last_login
+        };
+        
+        localStorage.setItem('currentUser', JSON.stringify(userObj));
+        setCurrentUser(userObj);
+
+        // Redirect based on role
+        const redirectPath = data.user.role === 'Admin' 
+          ? '/admin/AdminDashboard'
+          : '/dashboard';
+        
+        console.log('Login successful, redirecting to:', redirectPath);
+        router.push(redirectPath);
+      } else {
+        throw new Error(data.message || 'Login failed');
+      }
+    } catch (err) {
+      console.error("Login error details:", err);
+      
+      let errorMessage = 'Login failed. Please try again.';
+      
+      // Handle specific error cases
+      if (err.message.includes('Cannot connect to server')) {
+        errorMessage = err.message;
+      } else if (err.message.includes('Invalid email or password')) {
         errorMessage = 'Invalid email or password';
-        break;
-      case 'auth/too-many-requests':
-        errorMessage = 'Too many failed attempts. Account temporarily locked';
-        break;
-      case 'PERMISSION_DENIED':
-        errorMessage = 'You do not have permission to access this resource';
-        break;
-      default:
-        errorMessage = err.message || 'Login failed. Please try again.';
+      } else if (err.message.includes('account is inactive')) {
+        errorMessage = 'Your account is inactive. Please contact support.';
+      } else if (err.message.includes('temporarily locked')) {
+        errorMessage = 'Account temporarily locked. Try again later.';
+      } else if (err.message.includes('Failed to fetch') || err.message.includes('Network Error')) {
+        errorMessage = 'Cannot connect to server. Please make sure your PHP server (XAMPP/WAMP) is running on localhost.';
+      } else if (err.message.includes('invalid response')) {
+        errorMessage = 'Server configuration error. Please check PHP setup.';
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
     }
-    
-    setError(errorMessage);
-    setLoading(false);
-  }
-};
+  };
+
+  // ... rest of your component (handlePasswordReset and JSX remains the same)
   const handlePasswordReset = async (e) => {
     e.preventDefault();
     setError('');
@@ -105,22 +126,37 @@ const handleLogin = async (e) => {
     }
 
     try {
-      await sendPasswordResetEmail(auth, resetEmail);
-      setResetSent(true);
+      const response = await fetch(`${API_BASE_URL}login.php/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: resetEmail }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        setResetSent(true);
+      } else {
+        throw new Error(data.message || 'Failed to send reset email');
+      }
     } catch (err) {
       let errorMessage = 'Failed to send reset email';
       
-      if (err.code === 'auth/user-not-found') {
-        errorMessage = 'No account found with this email';
-      } else if (err.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address format';
+      if (err.message.includes('Network Error') || err.message.includes('Failed to fetch')) {
+        errorMessage = 'Unable to connect to server. Please check if the PHP server is running.';
       }
       
       setError(errorMessage);
     }
   };
 
- return (
+  return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-white flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <h2 className="mt-6 text-center text-3xl font-extrabold text-emerald-900">
