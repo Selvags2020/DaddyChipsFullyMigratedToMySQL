@@ -36,7 +36,7 @@ const AdminCategories = () => {
   useEffect(() => {
     console.log(currentUser)
     if (!currentUser || currentUser.role !== 'Admin') {
-      router.push('/Unauthorized');
+      router.push('/unauthorized');
     }
   }, [currentUser, router]);
 

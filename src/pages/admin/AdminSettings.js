@@ -19,7 +19,7 @@ const AdminSettings = () => {
   // Check admin role on component mount
   useEffect(() => {
     if (!currentUser || currentUser.role !== 'Admin') {
-      router.push('/Unauthorized');
+      router.push('/unauthorized');
     }
   }, [currentUser, router]);
 
