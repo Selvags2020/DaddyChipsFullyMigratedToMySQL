@@ -305,7 +305,7 @@ export default function Login() {
               </div>
 
               <div className="flex items-center justify-between">
-                <div className="flex items-center">
+                {/* <div className="flex items-center">
                   <input
                     id="remember-me"
                     name="remember-me"
@@ -315,9 +315,9 @@ export default function Login() {
                   <label htmlFor="remember-me" className="ml-2 block text-sm text-emerald-900">
                     Remember me
                   </label>
-                </div>
+                </div> */}
 
-                <div className="text-sm">
+                {/* <div className="text-sm">
                   <button
                     type="button"
                     onClick={() => setShowForgotPassword(true)}
@@ -325,7 +325,7 @@ export default function Login() {
                   >
                     Forgot password?
                   </button>
-                </div>
+                </div> */}
               </div>
 
               <div>
@@ -357,14 +357,14 @@ export default function Login() {
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-emerald-200"></div>
               </div>
-              <div className="relative flex justify-center text-sm">
+              {/* <div className="relative flex justify-center text-sm">
                 <span className="px-2 bg-white text-emerald-600">
                   Need help?{' '}
                   <a href="mailto:support@example.com" className="font-medium text-emerald-700 hover:text-emerald-600">
                     Contact support
                   </a>
                 </span>
-              </div>
+              </div> */}
             </div>
           </div>
         </div>
