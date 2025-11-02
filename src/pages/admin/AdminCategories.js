@@ -3,8 +3,10 @@ import { useRouter } from 'next/router';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/AdminLayout';
 import { API_URLS } from '../../constants';
+import { useApi } from '../../utils/api';
 
 const AdminCategories = () => {
+  const api = useApi();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -39,33 +41,33 @@ const AdminCategories = () => {
   }, [currentUser, router]);
 
   // Fetch categories from PHP API
-  const fetchCategories = async (search = '') => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (search) {
-        params.append('search', search);
-      }
+const fetchCategories = async (search = '') => {
+  try {
+    setLoading(true);
+    setError('');
 
-      const response = await fetch(`${API_URLS.BaseURL}categories.php?${params}`);
-      const result = await response.json();
+    // FIXED: Remove BaseURL concatenation since api service handles it
+    const url = search ? `categories.php?search=${encodeURIComponent(search)}` : 'categories.php';
+    const response = await api.get(url);
 
-      if (result.success) {
-        const categoriesArray = result.data.map(category => ({
-          id: category.category_id,
-          ...category
-        }));
-        setCategories(categoriesArray);
-      } else {
-        setCategories([]);
-      }
-      setLoading(false);
-    } catch (err) {
-      console.error('Error fetching categories:', err);
-      setError('Failed to load categories');
-      setLoading(false);
+    if (response.success) {
+      const categoriesArray = response.data.map(category => ({
+        id: category.category_id,
+        ...category
+      }));
+      setCategories(categoriesArray);
+    } else {
+      setCategories([]);
+      setError(response.message || 'Failed to load categories');
     }
-  };
+  } catch (err) {
+    console.error('Error fetching categories:', err);
+    setError(err.message || 'Failed to load categories');
+    setCategories([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Fetch categories on component mount and when search changes
   useEffect(() => {
@@ -157,7 +159,7 @@ const AdminCategories = () => {
     img.src = URL.createObjectURL(file);
   };
 
-  // Upload image to PHP API
+  // Upload image to PHP API using the API service
   const uploadImageToPHP = async () => {
     if (!imageFile) return formData.img_url;
 
@@ -168,19 +170,23 @@ const AdminCategories = () => {
       const formData = new FormData();
       formData.append('image', imageFile);
 
-      const response = await fetch(`${API_URLS.BaseURL}upload.php`, {
-        method: 'POST',
-        body: formData,
+      // Use the API service's upload method
+      const response = await api.upload('upload.php', formData, {
+        // Optional: Add progress tracking for upload
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.lengthComputable) {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(progress);
+          }
+        }
       });
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Failed to upload image to server');
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to upload image to server');
       }
 
       setUploadProgress(100);
-      return data.imageUrl;
+      return response.imageUrl || response.url; // Adjust based on your API response
     } catch (err) {
       console.error('Error uploading to PHP API:', err);
       throw new Error(err.message || 'Image upload failed');
@@ -190,69 +196,59 @@ const AdminCategories = () => {
   };
 
   // Handle form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+  // Handle form submission
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError('');
+  setLoading(true);
 
-    try {
-      let imageUrl = formData.img_url;
+  try {
+    let imageUrl = formData.img_url;
 
-      // Upload new image if selected
-      if (imageFile) {
-        imageUrl = await uploadImageToPHP();
-      }
-
-      const categoryData = {
-        category_name: formData.category_name,
-        img_url: imageUrl,
-        is_active: Boolean(formData.is_active),
-        created_by: currentUser?.fullName || 'Admin'
-      };
-
-      let response;
-      if (currentCategory) {
-        // Update existing category
-        response = await fetch(`${API_URLS.BaseURL}categories.php?id=${currentCategory.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(categoryData),
-        });
-      } else {
-        // Create new category
-        response = await fetch(`${API_URLS.BaseURL}categories.php`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(categoryData),
-        });
-      }
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.message || 'Failed to save category');
-      }
-
-      // Refresh categories list
-      await fetchCategories(searchTerm);
-
-      // Reset form
-      setFormData(initialFormState);
-      setImageFile(null);
-      setCurrentCategory(null);
-      setIsModalOpen(false);
-      setUploadProgress(0);
-    } catch (err) {
-      console.error("Error saving category:", err);
-      setError(err.message || 'Failed to save category');
-    } finally {
-      setLoading(false);
+    // Upload new image if selected
+    if (imageFile) {
+      imageUrl = await uploadImageToPHP();
     }
-  };
+
+    const categoryData = {
+      category_name: formData.category_name,
+      img_url: imageUrl,
+      is_active: Boolean(formData.is_active),
+      created_by: currentUser?.name || currentUser?.email || 'Admin'
+    };
+
+    let response;
+    if (currentCategory) {
+      // Update existing category - FIXED: Remove BaseURL prefix since api service adds it
+      response = await api.put(`categories.php?id=${currentCategory.id}`, categoryData);
+    } else {
+      // Create new category - FIXED: Remove BaseURL prefix
+      response = await api.post('categories.php', categoryData);
+    }
+
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to save category');
+    }
+
+    // Refresh categories list
+    await fetchCategories(searchTerm);
+
+    // Reset form
+    setFormData(initialFormState);
+    setImageFile(null);
+    setCurrentCategory(null);
+    setIsModalOpen(false);
+    setUploadProgress(0);
+    
+    // Show success message
+    setError('Category saved successfully!');
+  } catch (err) {
+    console.error("Error saving category:", err);
+    setError(err.message || 'Failed to save category');
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Edit category
   const handleEdit = (category) => {
@@ -262,32 +258,34 @@ const AdminCategories = () => {
       is_active: category.is_active,
       img_url: category.img_url
     });
+    setImageFile(null); // Reset image file when editing
     setIsModalOpen(true);
   };
 
   // Delete category
-  const handleDelete = async () => {
-    try {
-      const response = await fetch(`${API_URLS.BaseURL}categories.php?id=${categoryToDelete}`, {
-        method: 'DELETE',
-      });
+const handleDelete = async () => {
+  try {
+    setLoading(true);
+    // FIXED: Remove BaseURL prefix
+    const response = await api.delete(`categories.php?id=${categoryToDelete}`);
 
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.message || 'Failed to delete category');
-      }
-
-      // Refresh categories list
-      await fetchCategories(searchTerm);
-      
-      setIsDeleteConfirmOpen(false);
-      setCategoryToDelete(null);
-    } catch (err) {
-      setError('Failed to delete category');
-      console.error(err);
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to delete category');
     }
-  };
+
+    // Refresh categories list
+    await fetchCategories(searchTerm);
+    
+    setIsDeleteConfirmOpen(false);
+    setCategoryToDelete(null);
+    setError('Category deleted successfully!');
+  } catch (err) {
+    setError(err.message || 'Failed to delete category');
+    console.error(err);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Open delete confirmation
   const confirmDelete = (categoryId) => {
@@ -304,6 +302,7 @@ const AdminCategories = () => {
     setUploadProgress(0);
     setUploading(false);
     setDragActive(false);
+    setError('');
   };
 
   // Handle search
@@ -314,7 +313,7 @@ const AdminCategories = () => {
   // Filter categories based on search term
   const filteredCategories = categories.filter(category =>
     category.category_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    category.category_id.toLowerCase().includes(searchTerm.toLowerCase())
+    (category.category_id && category.category_id.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   if (!currentUser || currentUser.role !== 'Admin') {
@@ -332,6 +331,7 @@ const AdminCategories = () => {
       <Layout>
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+          <span className="ml-3 text-gray-600">Loading categories...</span>
         </div>
       </Layout>
     );
@@ -374,19 +374,19 @@ const AdminCategories = () => {
             {/* Add Category Button */}
             <button
               onClick={() => setIsModalOpen(true)}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center justify-center md:justify-start"
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center justify-center md:justify-start transition-colors duration-200"
               disabled={loading}
             >
               <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
-              {loading ? 'Loading...' : 'Add'}
+              {loading ? 'Loading...' : 'Add Category'}
             </button>
           </div>
         </div>
 
         {error && (
-          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md">
+          <div className={`p-4 mb-6 rounded-md ${error.includes('success') ? 'bg-green-100 border-l-4 border-green-500 text-green-700' : 'bg-red-100 border-l-4 border-red-500 text-red-700'}`}>
             <p>{error}</p>
           </div>
         )}
@@ -410,7 +410,7 @@ const AdminCategories = () => {
               {/* Table Body */}
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredCategories.map((category) => (
-                  <tr key={category.id} className="hover:bg-gray-50">
+                  <tr key={category.id} className="hover:bg-gray-50 transition-colors duration-200">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex-shrink-0 h-10 w-10">
                         <img
@@ -431,7 +431,7 @@ const AdminCategories = () => {
                       {category.created_by}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(category.created_at).toLocaleDateString()}
+                      {category.created_at ? new Date(category.created_at).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${category.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
@@ -441,8 +441,9 @@ const AdminCategories = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                       <button
                         onClick={() => handleEdit(category)}
-                        className="text-green-600 hover:text-green-900"
+                        className="text-green-600 hover:text-green-900 transition-colors duration-200 p-1 rounded"
                         title="Edit"
+                        disabled={loading}
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -450,8 +451,9 @@ const AdminCategories = () => {
                       </button>
                       <button
                         onClick={() => confirmDelete(category.id)}
-                        className="text-red-600 hover:text-red-900"
+                        className="text-red-600 hover:text-red-900 transition-colors duration-200 p-1 rounded"
                         title="Delete"
+                        disabled={loading}
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -464,7 +466,7 @@ const AdminCategories = () => {
             </table>
             {filteredCategories.length === 0 && !loading && (
               <div className="text-center py-8 text-gray-500">
-                No categories found
+                {searchTerm ? 'No categories found matching your search' : 'No categories found'}
               </div>
             )}
           </div>
@@ -481,7 +483,7 @@ const AdminCategories = () => {
                   </h2>
                   <button
                     onClick={closeModal}
-                    className="text-gray-500 hover:text-gray-700 focus:outline-none"
+                    className="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors duration-200"
                     disabled={uploading || loading}
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -496,7 +498,7 @@ const AdminCategories = () => {
                     <div className="col-span-1">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Category Image *</label>
                       <div
-                        className={`border-2 border-dashed rounded-lg p-4 text-center ${dragActive ? 'border-green-500 bg-green-50' : 'border-gray-300'}`}
+                        className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors duration-200 ${dragActive ? 'border-green-500 bg-green-50' : 'border-gray-300'} ${uploading ? 'opacity-50' : ''}`}
                         onDragEnter={handleDrag}
                         onDragLeave={handleDrag}
                         onDragOver={handleDrag}
@@ -510,7 +512,7 @@ const AdminCategories = () => {
                               className="h-32 w-32 object-contain mx-auto mb-4 rounded-md"
                             />
                             <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
-                              <label className="cursor-pointer bg-white py-2 px-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                              <label className={`cursor-pointer py-2 px-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
                                 Change Image
                                 <input
                                   type="file"
@@ -522,8 +524,11 @@ const AdminCategories = () => {
                               </label>
                               <button
                                 type="button"
-                                onClick={() => setFormData({ ...formData, img_url: '' })}
-                                className="py-2 px-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                                onClick={() => {
+                                  setFormData({ ...formData, img_url: '' });
+                                  setImageFile(null);
+                                }}
+                                className={`py-2 px-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 disabled={uploading}
                               >
                                 Remove
@@ -536,7 +541,7 @@ const AdminCategories = () => {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
                             <div className="flex flex-col sm:flex-row text-sm text-gray-600 justify-center items-center">
-                              <label className="relative cursor-pointer bg-white rounded-md font-medium text-green-600 hover:text-green-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-green-500">
+                              <label className={`relative cursor-pointer bg-white rounded-md font-medium text-green-600 hover:text-green-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-green-500 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
                                 <span>Upload a file</span>
                                 <input
                                   type="file"
@@ -583,8 +588,9 @@ const AdminCategories = () => {
                           value={formData.category_name}
                           onChange={(e) => setFormData({ ...formData, category_name: e.target.value })}
                           required
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 disabled:opacity-50"
                           disabled={uploading}
+                          placeholder="Enter category name"
                         />
                       </div>
 
@@ -595,7 +601,7 @@ const AdminCategories = () => {
                           name="is_active"
                           checked={formData.is_active}
                           onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                          className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                          className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded disabled:opacity-50"
                           disabled={uploading}
                         />
                         <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
@@ -609,17 +615,17 @@ const AdminCategories = () => {
                     <button
                       type="button"
                       onClick={closeModal}
-                      className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                      className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 disabled:opacity-50"
                       disabled={uploading || loading}
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      disabled={loading || uploading || !formData.img_url}
-                      className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${(loading || uploading || !formData.img_url) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      disabled={loading || uploading || !formData.category_name || !formData.img_url}
+                      className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 ${(loading || uploading || !formData.category_name || !formData.img_url) ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      {loading ? 'Saving...' : 'Save Category'}
+                      {loading ? 'Saving...' : (currentCategory ? 'Update Category' : 'Save Category')}
                     </button>
                   </div>
                 </form>
@@ -639,7 +645,7 @@ const AdminCategories = () => {
                   </h2>
                   <button
                     onClick={() => setIsDeleteConfirmOpen(false)}
-                    className="text-gray-500 hover:text-gray-700 focus:outline-none"
+                    className="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors duration-200"
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -654,13 +660,13 @@ const AdminCategories = () => {
                 <div className="flex flex-col-reverse sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
                   <button
                     onClick={() => setIsDeleteConfirmOpen(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleDelete}
-                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200"
                   >
                     Delete
                   </button>

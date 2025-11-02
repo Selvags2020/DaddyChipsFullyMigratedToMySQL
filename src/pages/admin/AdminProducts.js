@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/AdminLayout';
 import { API_URLS } from '../../constants';
+import { useApi } from '../../utils/api';
 
 const AdminProducts = () => {
+  const api = useApi();
   const [products, setProducts] = useState([]);
-  const [allProducts, setAllProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -22,7 +23,7 @@ const AdminProducts = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalProducts, setTotalProducts] = useState(0);
-
+  
   const router = useRouter();
   const { currentUser } = useAuth();
 
@@ -47,97 +48,73 @@ const AdminProducts = () => {
   // Check admin role on component mount
   useEffect(() => {
     if (!currentUser || currentUser.role !== 'Admin') {
-      // router.push('/pages/Unauthorized');
+      router.push('/Unauthorized');
     }
   }, [currentUser, router]);
 
-  // Fetch categories from PHP API
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const response = await fetch(`${API_URLS.BaseURL}categories.php`);
-        const result = await response.json();
-        
-        if (result.success) {
-          const categoriesArray = result.data.map(category => ({
-            id: category.category_id,
-            name: category.category_name
-          }));
-          setCategories(categoriesArray);
-        }
-      } catch (err) {
-        console.error('Error fetching categories:', err);
+  // Fetch categories from PHP API using the API service
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get('categories.php');
+      
+      if (response.success) {
+        const categoriesArray = response.data.map(category => ({
+          id: category.category_id,
+          name: category.category_name
+        }));
+        setCategories(categoriesArray);
       }
-    };
+    } catch (err) {
+      console.error('Error fetching categories:', err);
+      setError('Failed to load categories');
+    }
+  };
 
-    fetchCategories();
-  }, []);
-
-  // Fetch products from PHP API
+  // Fetch products from PHP API using the API service
   const fetchProducts = async (page = 1, search = '') => {
     try {
       setLoading(true);
+      setError('');
+
       const params = new URLSearchParams({
         page: page.toString(),
         limit: PRODUCTS_PER_PAGE.toString(),
         ...(search && { search })
       });
 
-      const response = await fetch(`${API_URLS.BaseURL}products.php?${params}`);
-      const result = await response.json();
+      // FIXED: Remove BaseURL concatenation since api service handles it
+      const response = await api.get(`products.php?${params}`);
 
-      if (result.success) {
-        const productsArray = result.data.map(product => ({
+      if (response.success) {
+        const productsArray = response.data.map(product => ({
           id: product.product_id,
           firebase_id: product.firebase_id,
           ...product
         }));
         
         setProducts(productsArray);
-        setTotalProducts(result.pagination.total);
-        setTotalPages(result.pagination.total_pages);
-        
-        // For search functionality, fetch all products without pagination
-        if (search) {
-          const allResponse = await fetch(`${API_URLS.BaseURL}products.php?limit=1000&search=${search}`);
-          const allResult = await allResponse.json();
-          if (allResult.success) {
-            setAllProducts(allResult.data.map(p => ({ id: p.product_id, ...p })));
-          }
-        }
+        setTotalProducts(response.pagination.total);
+        setTotalPages(response.pagination.total_pages);
       } else {
         setProducts([]);
         setTotalProducts(0);
         setTotalPages(1);
+        setError(response.message || 'Failed to load products');
       }
-      setLoading(false);
     } catch (err) {
-      setError('Failed to load products');
+      console.error('Error fetching products:', err);
+      setError(err.message || 'Failed to load products');
+      setProducts([]);
+      setTotalProducts(0);
+      setTotalPages(1);
+    } finally {
       setLoading(false);
-      console.error(err);
     }
   };
 
-  // Fetch all products for search
+  // Fetch categories on component mount
   useEffect(() => {
-    const fetchAllProducts = async () => {
-      try {
-        const response = await fetch(`${API_URLS.BaseURL}products.php?limit=1000`);
-        const result = await response.json();
-
-        if (result.success) {
-          const productsArray = result.data.map(product => ({
-            id: product.product_id,
-            ...product
-          }));
-          setAllProducts(productsArray);
-        }
-      } catch (err) {
-        console.error('Error fetching all products:', err);
-      }
-    };
-
-    fetchAllProducts();
+    fetchCategories();
   }, []);
 
   // Fetch paginated products
@@ -215,7 +192,7 @@ const AdminProducts = () => {
     }
   };
 
-  // Handle image upload
+  // Handle image upload with comprehensive validation
   const handleImageUpload = async (e) => {
     setError('');
     setUploadProgress(0);
@@ -255,6 +232,7 @@ const AdminProducts = () => {
         return;
       }
 
+      // All validations passed
       setImageFile(file);
 
       // Create preview
@@ -278,7 +256,7 @@ const AdminProducts = () => {
     img.src = URL.createObjectURL(file);
   };
 
-  // Upload image to PHP API
+  // Upload image to PHP API using the API service
   const uploadImageToPHP = async () => {
     if (!imageFile) return formData.product_image;
 
@@ -289,19 +267,23 @@ const AdminProducts = () => {
       const formData = new FormData();
       formData.append('image', imageFile);
 
-      const response = await fetch(`${API_URLS.BaseURL}upload.php`, {
-        method: 'POST',
-        body: formData,
+      // Use the API service's upload method
+      const response = await api.upload('upload.php', formData, {
+        // Optional: Add progress tracking for upload
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.lengthComputable) {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(progress);
+          }
+        }
       });
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Failed to upload image to server');
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to upload image to server');
       }
 
       setUploadProgress(100);
-      return data.imageUrl;
+      return response.imageUrl || response.url; // Adjust based on your API response
     } catch (err) {
       console.error('Error uploading to PHP API:', err);
       throw new Error(err.message || 'Image upload failed');
@@ -342,35 +324,21 @@ const AdminProducts = () => {
         product_image: imageUrl,
         tags: formData.tags.filter(tag => tag.trim() !== ''),
         is_active: Boolean(formData.is_active),
-        created_by: currentUser?.fullName || 'Admin',
+        created_by: currentUser?.email || 'Admin', // Use email from authenticated user
         ...(currentProduct?.firebase_id && { firebase_id: currentProduct.firebase_id })
       };
 
       let response;
       if (currentProduct) {
-        // Update existing product
-        response = await fetch(`${API_URLS.BaseURL}products.php?id=${currentProduct.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(productData),
-        });
+        // Update existing product - FIXED: Remove BaseURL prefix
+        response = await api.put(`products.php?id=${currentProduct.id}`, productData);
       } else {
-        // Create new product
-        response = await fetch(`${API_URLS.BaseURL}products.php`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(productData),
-        });
+        // Create new product - FIXED: Remove BaseURL prefix
+        response = await api.post('products.php', productData);
       }
 
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.message || 'Failed to save product');
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to save product');
       }
 
       // Refresh products list
@@ -382,6 +350,9 @@ const AdminProducts = () => {
       setCurrentProduct(null);
       setIsModalOpen(false);
       setUploadProgress(0);
+      
+      // Show success message
+      setError('Product saved successfully!');
     } catch (err) {
       console.error("Error saving product:", err);
       setError(err.message || 'Failed to save product');
@@ -411,14 +382,12 @@ const AdminProducts = () => {
   // Delete product
   const handleDelete = async () => {
     try {
-      const response = await fetch(`${API_URLS.BaseURL}products.php?id=${productToDelete}`, {
-        method: 'DELETE',
-      });
+      setLoading(true);
+      // FIXED: Remove BaseURL prefix
+      const response = await api.delete(`products.php?id=${productToDelete}`);
 
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.message || 'Failed to delete product');
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to delete product');
       }
 
       // Refresh products list
@@ -426,9 +395,12 @@ const AdminProducts = () => {
       
       setIsDeleteConfirmOpen(false);
       setProductToDelete(null);
+      setError('Product deleted successfully!');
     } catch (err) {
-      setError('Failed to delete product');
+      setError(err.message || 'Failed to delete product');
       console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -447,6 +419,7 @@ const AdminProducts = () => {
     setUploadProgress(0);
     setUploading(false);
     setDragActive(false);
+    setError('');
   };
 
   if (!currentUser || currentUser.role !== 'Admin') {
@@ -464,6 +437,7 @@ const AdminProducts = () => {
       <Layout>
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+          <span className="ml-3 text-gray-600">Loading products...</span>
         </div>
       </Layout>
     );
@@ -506,19 +480,19 @@ const AdminProducts = () => {
             {/* Add Product Button */}
             <button
               onClick={() => setIsModalOpen(true)}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center justify-center md:justify-start"
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center justify-center md:justify-start transition-colors duration-200"
               disabled={loading}
             >
               <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
-              {loading ? 'Loading...' : 'Add'}
+              {loading ? 'Loading...' : 'Add Product'}
             </button>
           </div>
         </div>
 
         {error && (
-          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md">
+          <div className={`p-4 mb-6 rounded-md ${error.includes('success') ? 'bg-green-100 border-l-4 border-green-500 text-green-700' : 'bg-red-100 border-l-4 border-red-500 text-red-700'}`}>
             <p>{error}</p>
           </div>
         )}
@@ -545,7 +519,7 @@ const AdminProducts = () => {
                 {products.map((product) => (
                   <tr
                     key={product.id}
-                    className="hover:bg-gray-50"
+                    className="hover:bg-gray-50 transition-colors duration-200"
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex-shrink-0 h-10 w-10">
@@ -585,8 +559,9 @@ const AdminProducts = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                       <button
                         onClick={() => handleEdit(product)}
-                        className="text-green-600 hover:text-green-900"
+                        className="text-green-600 hover:text-green-900 transition-colors duration-200 p-1 rounded"
                         title="Edit"
+                        disabled={loading}
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -594,8 +569,9 @@ const AdminProducts = () => {
                       </button>
                       <button
                         onClick={() => confirmDelete(product.id)}
-                        className="text-red-600 hover:text-red-900"
+                        className="text-red-600 hover:text-red-900 transition-colors duration-200 p-1 rounded"
                         title="Delete"
+                        disabled={loading}
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -614,14 +590,14 @@ const AdminProducts = () => {
                   <button
                     onClick={handlePrevPage}
                     disabled={currentPage === 1}
-                    className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                    className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md transition-colors duration-200 ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                   >
                     Previous
                   </button>
                   <button
                     onClick={handleNextPage}
                     disabled={currentPage === totalPages}
-                    className={`ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                    className={`ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md transition-colors duration-200 ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                   >
                     Next
                   </button>
@@ -639,7 +615,7 @@ const AdminProducts = () => {
                       <button
                         onClick={handlePrevPage}
                         disabled={currentPage === 1}
-                        className={`relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium ${currentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'}`}
+                        className={`relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium transition-colors duration-200 ${currentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'}`}
                       >
                         <span className="sr-only">Previous</span>
                         <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -652,7 +628,7 @@ const AdminProducts = () => {
                       <button
                         onClick={handleNextPage}
                         disabled={currentPage === totalPages}
-                        className={`relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium ${currentPage === totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'}`}
+                        className={`relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium transition-colors duration-200 ${currentPage === totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'}`}
                       >
                         <span className="sr-only">Next</span>
                         <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -667,7 +643,7 @@ const AdminProducts = () => {
             
             {products.length === 0 && !loading && (
               <div className="text-center py-8 text-gray-500">
-                No products found
+                {searchTerm ? 'No products found matching your search' : 'No products found'}
               </div>
             )}
           </div>
@@ -684,7 +660,7 @@ const AdminProducts = () => {
                   </h2>
                   <button
                     onClick={closeModal}
-                    className="text-gray-500 hover:text-gray-700 focus:outline-none"
+                    className="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors duration-200"
                     disabled={uploading || loading}
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -698,7 +674,7 @@ const AdminProducts = () => {
                     <div className="col-span-1">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Product Image *</label>
                       <div
-                        className={`border-2 border-dashed rounded-lg p-4 text-center ${dragActive ? 'border-green-500 bg-green-50' : 'border-gray-300'}`}
+                        className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors duration-200 ${dragActive ? 'border-green-500 bg-green-50' : 'border-gray-300'} ${uploading ? 'opacity-50' : ''}`}
                         onDragEnter={handleDrag}
                         onDragLeave={handleDrag}
                         onDragOver={handleDrag}
@@ -712,7 +688,7 @@ const AdminProducts = () => {
                               className="h-32 w-32 object-contain mx-auto mb-4 rounded-md"
                             />
                             <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
-                              <label className="cursor-pointer bg-white py-2 px-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                              <label className={`cursor-pointer py-2 px-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
                                 Change Image
                                 <input
                                   type="file"
@@ -724,8 +700,11 @@ const AdminProducts = () => {
                               </label>
                               <button
                                 type="button"
-                                onClick={() => setFormData({ ...formData, product_image: '' })}
-                                className="py-2 px-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                                onClick={() => {
+                                  setFormData({ ...formData, product_image: '' });
+                                  setImageFile(null);
+                                }}
+                                className={`py-2 px-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 disabled={uploading}
                               >
                                 Remove
@@ -738,7 +717,7 @@ const AdminProducts = () => {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
                             <div className="flex flex-col sm:flex-row text-sm text-gray-600 justify-center items-center">
-                              <label className="relative cursor-pointer bg-white rounded-md font-medium text-green-600 hover:text-green-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-green-500">
+                              <label className={`relative cursor-pointer bg-white rounded-md font-medium text-green-600 hover:text-green-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-green-500 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
                                 <span>Upload a file</span>
                                 <input
                                   type="file"
@@ -785,8 +764,9 @@ const AdminProducts = () => {
                           value={formData.name}
                           onChange={handleInputChange}
                           required
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 disabled:opacity-50"
                           disabled={uploading}
+                          placeholder="Enter product name"
                         />
                       </div>
 
@@ -800,7 +780,7 @@ const AdminProducts = () => {
                           value={formData.category_id}
                           onChange={handleCategoryChange}
                           required
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 disabled:opacity-50"
                           disabled={uploading}
                         >
                           <option value="">Select a category</option>
@@ -826,8 +806,9 @@ const AdminProducts = () => {
                             min="0"
                             step="0.01"
                             required
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 disabled:opacity-50"
                             disabled={uploading}
+                            placeholder="0.00"
                           />
                         </div>
 
@@ -843,8 +824,9 @@ const AdminProducts = () => {
                             onChange={handleInputChange}
                             min="0"
                             step="0.01"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 disabled:opacity-50"
                             disabled={uploading}
+                            placeholder="Optional"
                           />
                         </div>
                       </div>
@@ -861,8 +843,9 @@ const AdminProducts = () => {
                           onChange={handleInputChange}
                           min="0"
                           required
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 disabled:opacity-50"
                           disabled={uploading}
+                          placeholder="0"
                         />
                       </div>
 
@@ -873,7 +856,7 @@ const AdminProducts = () => {
                           name="is_active"
                           checked={formData.is_active}
                           onChange={handleInputChange}
-                          className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                          className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded disabled:opacity-50"
                           disabled={uploading}
                         />
                         <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
@@ -893,8 +876,9 @@ const AdminProducts = () => {
                         value={formData.description}
                         onChange={handleInputChange}
                         required
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 disabled:opacity-50"
                         disabled={uploading}
+                        placeholder="Enter product description"
                       />
                     </div>
 
@@ -911,7 +895,7 @@ const AdminProducts = () => {
                           const tags = e.target.value.split(',').map(tag => tag.trim());
                           setFormData({ ...formData, tags });
                         }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 disabled:opacity-50"
                         disabled={uploading}
                         placeholder="e.g., millet, organic, gluten-free"
                       />
@@ -922,17 +906,17 @@ const AdminProducts = () => {
                     <button
                       type="button"
                       onClick={closeModal}
-                      className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                      className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 disabled:opacity-50"
                       disabled={uploading || loading}
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      disabled={loading || uploading || !formData.product_image}
-                      className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${(loading || uploading || !formData.product_image) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      disabled={loading || uploading || !formData.product_image || !formData.name || !formData.category_id || !formData.standard_price || !formData.stock_quantity || !formData.description}
+                      className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 ${(loading || uploading || !formData.product_image || !formData.name || !formData.category_id || !formData.standard_price || !formData.stock_quantity || !formData.description) ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      {loading ? 'Saving...' : 'Save Product'}
+                      {loading ? 'Saving...' : (currentProduct ? 'Update Product' : 'Save Product')}
                     </button>
                   </div>
                 </form>
@@ -952,7 +936,7 @@ const AdminProducts = () => {
                   </h2>
                   <button
                     onClick={() => setIsDeleteConfirmOpen(false)}
-                    className="text-gray-500 hover:text-gray-700 focus:outline-none"
+                    className="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors duration-200"
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -967,13 +951,13 @@ const AdminProducts = () => {
                 <div className="flex flex-col-reverse sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
                   <button
                     onClick={() => setIsDeleteConfirmOpen(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleDelete}
-                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200"
                   >
                     Delete
                   </button>

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/AdminLayout';
-import { API_URLS } from '../../constants';
+import { useApi } from '../../utils/api';
 
 const AdminSettings = () => {
   const [settings, setSettings] = useState({ BusinessWhatsAppNumber: '' });
@@ -14,53 +14,43 @@ const AdminSettings = () => {
   
   const router = useRouter();
   const { currentUser } = useAuth();
+  const api = useApi();
 
   // Check admin role on component mount
-  if (!currentUser || currentUser.role !== 'Admin') {
-    return (
-      <Layout>
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
-        </div>
-      </Layout>
-    );
-  }
-
-  // Fetch settings from PHP API
   useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(`${API_URLS.BaseURL}settings.php`, {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            'Accept': 'application/json',
-          },
-        });
+    if (!currentUser || currentUser.role !== 'Admin') {
+      router.push('/Unauthorized');
+    }
+  }, [currentUser, router]);
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+  // Fetch settings from PHP API using the API service
+  const fetchSettings = async () => {
+    try {
+      setLoading(true);
+      setError('');
 
-        const result = await response.json();
+      // FIXED: Remove BaseURL concatenation since api service handles it
+      const response = await api.get('settings.php');
 
-        if (result.success) {
-          setSettings(result.data);
-          setFormData(result.data);
-        } else {
-          setSettings({ BusinessWhatsAppNumber: '' });
-          setFormData({ BusinessWhatsAppNumber: '' });
-          console.error('Failed to fetch settings:', result.message);
-        }
-        setLoading(false);
-      } catch (err) {
-        console.error('Error fetching settings:', err);
-        setError('Failed to load settings');
-        setLoading(false);
+      if (response.success) {
+        setSettings(response.data);
+        setFormData(response.data);
+      } else {
+        setSettings({ BusinessWhatsAppNumber: '' });
+        setFormData({ BusinessWhatsAppNumber: '' });
+        setError(response.message || 'Failed to load settings');
       }
-    };
+    } catch (err) {
+      console.error('Error fetching settings:', err);
+      setError(err.message || 'Failed to load settings');
+      setSettings({ BusinessWhatsAppNumber: '' });
+      setFormData({ BusinessWhatsAppNumber: '' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchSettings();
   }, []);
 
@@ -78,32 +68,23 @@ const AdminSettings = () => {
     setLoading(true);
 
     try {
-      // Validate WhatsApp number
-      if (!/^\d{10,15}$/.test(formData.BusinessWhatsAppNumber)) {
+      // Validate WhatsApp number (allow empty for reset, but if provided must be valid)
+      if (formData.BusinessWhatsAppNumber && !/^\d{10,15}$/.test(formData.BusinessWhatsAppNumber)) {
         throw new Error('Please enter a valid WhatsApp number (10-15 digits)');
       }
 
-      const response = await fetch(`${API_URLS.BaseURL}settings.php`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
+      // FIXED: Remove BaseURL prefix since api service adds it
+      const response = await api.put('settings.php', formData);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to save settings');
       }
 
-      const result = await response.json();
-
-      if (result.success) {
-        setSettings(formData);
-        setIsEditing(false);
-      } else {
-        throw new Error(result.message);
-      }
+      setSettings(formData);
+      setIsEditing(false);
+      
+      // Show success message
+      setError('Settings updated successfully!');
     } catch (err) {
       console.error("Error saving settings:", err);
       setError(err.message || 'Failed to save settings');
@@ -124,30 +105,25 @@ const AdminSettings = () => {
 
   const handleReset = async () => {
     try {
-      const response = await fetch(`${API_URLS.BaseURL}settings.php`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
+      setLoading(true);
+      // FIXED: Remove BaseURL prefix
+      const response = await api.delete('settings.php');
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to reset settings');
       }
 
-      const result = await response.json();
-
-      if (result.success) {
-        setSettings({ BusinessWhatsAppNumber: '' });
-        setFormData({ BusinessWhatsAppNumber: '' });
-        setIsDeleteConfirmOpen(false);
-      } else {
-        throw new Error(result.message);
-      }
+      setSettings({ BusinessWhatsAppNumber: '' });
+      setFormData({ BusinessWhatsAppNumber: '' });
+      setIsDeleteConfirmOpen(false);
+      
+      // Show success message
+      setError('Settings reset successfully!');
     } catch (err) {
-      setError('Failed to reset settings');
+      setError(err.message || 'Failed to reset settings');
       console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -166,6 +142,7 @@ const AdminSettings = () => {
       <Layout>
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+          <span className="ml-3 text-gray-600">Loading settings...</span>
         </div>
       </Layout>
     );
@@ -190,7 +167,7 @@ const AdminSettings = () => {
         </div>
 
         {error && (
-          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md">
+          <div className={`p-4 mb-6 rounded-md ${error.includes('success') ? 'bg-green-100 border-l-4 border-green-500 text-green-700' : 'bg-red-100 border-l-4 border-red-500 text-red-700'}`}>
             <p>{error}</p>
           </div>
         )}
@@ -209,22 +186,27 @@ const AdminSettings = () => {
                     <div className="mt-1 text-sm text-gray-900 p-2 bg-gray-50 rounded-md">
                       {settings.BusinessWhatsAppNumber || 'Not set'}
                     </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      This number will be used for WhatsApp integration throughout the application
+                    </p>
                   </div>
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     onClick={() => setIsEditing(true)}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center"
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center transition-colors duration-200"
+                    disabled={loading}
                   >
                     <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
-                    Edit
+                    {loading ? 'Loading...' : 'Edit Settings'}
                   </button>
                   <button
                     onClick={confirmReset}
-                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center"
+                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center transition-colors duration-200"
+                    disabled={loading || !settings.BusinessWhatsAppNumber}
                   >
                     <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -243,7 +225,7 @@ const AdminSettings = () => {
                   <div className="grid grid-cols-1 gap-y-4">
                     <div>
                       <label htmlFor="BusinessWhatsAppNumber" className="block text-sm font-medium text-gray-700 mb-1">
-                        WhatsApp Business Number *
+                        WhatsApp Business Number
                       </label>
                       <input
                         type="tel"
@@ -251,13 +233,13 @@ const AdminSettings = () => {
                         name="BusinessWhatsAppNumber"
                         value={formData.BusinessWhatsAppNumber}
                         onChange={handleInputChange}
-                        required
                         pattern="[0-9]{10,15}"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
-                        placeholder="Enter 10-15 digit WhatsApp number"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 disabled:opacity-50"
+                        placeholder="Enter 10-15 digit WhatsApp number (optional)"
+                        disabled={loading}
                       />
                       <p className="mt-1 text-xs text-gray-500">
-                        Include country code but omit '+' or '00' (e.g., 919952322484)
+                        Include country code but omit '+' or '00' (e.g., 919952322484). Leave empty to remove the number.
                       </p>
                     </div>
                   </div>
@@ -266,7 +248,7 @@ const AdminSettings = () => {
                     <button
                       type="button"
                       onClick={handleCancel}
-                      className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                      className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 disabled:opacity-50"
                       disabled={loading}
                     >
                       Cancel
@@ -274,7 +256,7 @@ const AdminSettings = () => {
                     <button
                       type="submit"
                       disabled={loading}
-                      className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       {loading ? (
                         <>
@@ -298,11 +280,27 @@ const AdminSettings = () => {
             <div className="border-b border-gray-200 pb-4">
               <h2 className="text-lg font-medium text-gray-900">WhatsApp Integration Guide</h2>
             </div>
-            <div className="mt-4 space-y-4 text-sm text-gray-700">
-              <p>1. Enter your business WhatsApp number above (with country code but without '+' or '00').</p>
-              <p>2. Customers will be able to click a WhatsApp button to message this number directly.</p>
-              <p>3. Ensure your WhatsApp business account is properly set up to receive messages.</p>
-              <p>4. Example format: 91123456789 (India country code + number)</p>
+            <div className="mt-4 space-y-3 text-sm text-gray-700">
+              <div className="flex items-start">
+                <span className="bg-green-100 text-green-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium mr-3 mt-0.5 flex-shrink-0">1</span>
+                <p>Enter your business WhatsApp number above (with country code but without '+' or '00')</p>
+              </div>
+              <div className="flex items-start">
+                <span className="bg-green-100 text-green-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium mr-3 mt-0.5 flex-shrink-0">2</span>
+                <p>Customers will be able to click a WhatsApp button to message this number directly</p>
+              </div>
+              <div className="flex items-start">
+                <span className="bg-green-100 text-green-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium mr-3 mt-0.5 flex-shrink-0">3</span>
+                <p>Ensure your WhatsApp business account is properly set up to receive messages</p>
+              </div>
+              <div className="flex items-start">
+                <span className="bg-green-100 text-green-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium mr-3 mt-0.5 flex-shrink-0">4</span>
+                <p>Example format: 919876543210 (India country code 91 + 9876543210)</p>
+              </div>
+              <div className="flex items-start">
+                <span className="bg-green-100 text-green-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium mr-3 mt-0.5 flex-shrink-0">5</span>
+                <p>Leave the field empty and save to remove the WhatsApp number integration</p>
+              </div>
             </div>
           </div>
         </div>
@@ -319,7 +317,7 @@ const AdminSettings = () => {
                 </h2>
                 <button
                   onClick={() => setIsDeleteConfirmOpen(false)}
-                  className="text-gray-500 hover:text-gray-700 focus:outline-none"
+                  className="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors duration-200"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -328,21 +326,21 @@ const AdminSettings = () => {
               </div>
 
               <p className="text-gray-700 mb-6">
-                Are you sure you want to reset the WhatsApp number? This will remove the current setting.
+                Are you sure you want to reset the WhatsApp number? This will remove the current setting and disable WhatsApp integration.
               </p>
 
               <div className="flex flex-col-reverse sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
                 <button
                   onClick={() => setIsDeleteConfirmOpen(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleReset}
-                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200"
                 >
-                  Reset
+                  Reset Settings
                 </button>
               </div>
             </div>

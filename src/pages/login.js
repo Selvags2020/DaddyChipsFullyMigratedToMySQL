@@ -15,8 +15,9 @@ export default function Login() {
   const [resetEmail, setResetEmail] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const router = useRouter();
-  const { setCurrentUser } = useAuth();
+  const { setCurrentUser, setAuthToken } = useAuth();
 
+  // Test server connection
   const testServerConnection = async () => {
     try {
       const testResponse = await fetch(`${API_BASE_URL}login.php`, {
@@ -29,6 +30,26 @@ export default function Login() {
     }
   };
 
+  // Store token securely
+  const storeToken = (token) => {
+    try {
+      // Store in localStorage (persists across browser sessions)
+      localStorage.setItem('authToken', token);
+      
+      // Also store in sessionStorage (cleared when browser closes)
+      sessionStorage.setItem('authToken', token);
+      
+      // Set in auth context for immediate use
+      setAuthToken(token);
+      
+      console.log('Token stored successfully');
+    } catch (error) {
+      console.error('Error storing token:', error);
+      throw new Error('Failed to store authentication token');
+    }
+  };
+
+  // Handle login with token
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -50,7 +71,6 @@ export default function Login() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email, password }),
-        // Remove credentials for now to simplify
       });
 
       console.log('Response received, status:', response.status);
@@ -67,6 +87,14 @@ export default function Login() {
       console.log('Response data:', data);
 
       if (data.success) {
+        // Store the JWT token
+        if (!data.token) {
+          throw new Error('No authentication token received from server');
+        }
+
+        // Store token securely
+        storeToken(data.token);
+
         // Store user data in localStorage and context
         const userObj = {
           uid: data.user.uid,
@@ -107,6 +135,10 @@ export default function Login() {
         errorMessage = 'Cannot connect to server. Please make sure your PHP server (XAMPP/WAMP) is running on localhost.';
       } else if (err.message.includes('invalid response')) {
         errorMessage = 'Server configuration error. Please check PHP setup.';
+      } else if (err.message.includes('No authentication token')) {
+        errorMessage = 'Authentication error. Please try again.';
+      } else if (err.message.includes('Failed to store')) {
+        errorMessage = 'Browser storage error. Please check your browser settings.';
       }
       
       setError(errorMessage);
@@ -115,7 +147,6 @@ export default function Login() {
     }
   };
 
-  // ... rest of your component (handlePasswordReset and JSX remains the same)
   const handlePasswordReset = async (e) => {
     e.preventDefault();
     setError('');
@@ -126,7 +157,7 @@ export default function Login() {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}login.php/forgot-password`, {
+      const response = await fetch(`${API_BASE_URL}login.php`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
