@@ -16,7 +16,7 @@ import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
 
 // API Configuration
-const API_BASE_URL = 'http://localhost/DaddyChipsAPI'; // Update with your PHP API URL
+const API_BASE_URL = 'http://localhost/DaddyChipsAPI';
 
 // API Service functions
 const apiService = {
@@ -41,11 +41,11 @@ const apiService = {
 
   // Settings API
   async getSettings() {
-    // For now, return a default WhatsApp number
-    // You'll need to create a settings API endpoint
-    return {
-      BusinessWhatsAppNumber: '1234567890' // Replace with actual number from your database
-    };
+    const response = await fetch(`${API_BASE_URL}/settings.php`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch settings');
+    }
+    return await response.json();
   }
 };
 
@@ -75,7 +75,7 @@ export default function CartPage() {
     const fetchBusinessNumber = async () => {
       try {
         const settings = await apiService.getSettings();
-        setBusinessWhatsAppNumber(settings.BusinessWhatsAppNumber || '');
+        setBusinessWhatsAppNumber(settings.data?.BusinessWhatsAppNumber || '');
       } catch (error) {
         console.error('Error fetching business WhatsApp number:', error);
       }
@@ -130,8 +130,17 @@ export default function CartPage() {
         remarks: '',
         customer_mobile_number: customerMobile,
         order_source: getDeviceType(),
-        created_by: 'customer'
-        // Let MySQL handle the timestamp with NOW()
+        created_by: 'customer',
+        cart_items: cart.map(item => ({
+          id: item.id,
+          name: item.name,
+          category_id: item.category_id,
+          category_name: item.category_name,
+          quantity: item.quantity,
+          standard_price: typeof item.standard_price === 'string' ? parseFloat(item.standard_price) : item.standard_price,
+          offer_price: item.offer_price ? (typeof item.offer_price === 'string' ? parseFloat(item.offer_price) : item.offer_price) : null,
+          product_image: item.product_image || ''
+        }))
       };
 
       const result = await apiService.createOrder(orderDetails);
@@ -188,19 +197,8 @@ export default function CartPage() {
         setSnackbarOpen(true);
       }
     } else {
-      // On desktop or mobile without WhatsApp
-    //  const { success, orderNumber } = await saveOrderToMySQL('');
-     setMobileInputOpen(true);
-      // if (success) {
-      //   setPopupMsg(`Please install WhatsApp mobile app and send this information to ${businessWhatsAppNumber}:\n\n${generateCartMessage(orderNumber)}`);
-      //   setPopupOpen(false);
-      //   // Prompt for mobile number
-      //   setMobileInputOpen(true);
-      // } else {
-      //   setSnackbarMessage('Failed to save order. Please try again.');
-      //   setSnackbarSeverity('error');
-      //   setSnackbarOpen(true);
-      // }
+      // On desktop or mobile without WhatsApp - prompt for mobile number
+      setMobileInputOpen(true);
     }
   };
 
