@@ -6,8 +6,7 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import CloseIcon from '@mui/icons-material/Close';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import AddIcon from '@mui/icons-material/Add';
-import RemoveIcon from '@mui/icons-material/Remove';
-import allImg from './all.png';
+import RemoveIcon from '@mui/icons-material/Remove'; 
 import {
   Container,
   Card,
@@ -411,10 +410,10 @@ export default function ProductPage() {
 
   // All category data
   const allCategory = {
-    category_id: 'all',
-    category_name: 'All',
-    img_url: 'http:\/\/localhost\/DaddyChipsAPI\/uploads\/all.png'
-  };
+  category_id: 'all',
+  category_name: 'All',
+  img_url: 'https://daddychips.co.in/DaddyChipsAPI/uploads/all.png'
+};
 
   // Calculate total items in cart
   const totalItems = cart.reduce((total, item) => total + item.quantity, 0);
@@ -515,7 +514,7 @@ export default function ProductPage() {
           // Then open WhatsApp
           clearCart();
           const message = generateCartMessage(orderNumber);
-          window.open(`https://wa.me/${businessWhatsAppNumber}?text=${encodeURIComponent(message)}`, '_blank');
+          window.open(`https://wa.me/${String(businessWhatsAppNumber).trim()}?text=${encodeURIComponent(message)}`, '_blank');
         } else {
           setSnackbarMessage('Failed to save order. Please try again.');
           setSnackbarSeverity('error');

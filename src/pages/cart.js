@@ -14,9 +14,10 @@ import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
+import { API_URLS } from '../constants';
 
 // API Configuration
-const API_BASE_URL = 'http://localhost/DaddyChipsAPI';
+const API_BASE_URL = API_URLS.BaseURL
 
 // API Service functions
 const apiService = {
@@ -75,7 +76,9 @@ export default function CartPage() {
     const fetchBusinessNumber = async () => {
       try {
         const settings = await apiService.getSettings();
-        setBusinessWhatsAppNumber(settings.data?.BusinessWhatsAppNumber || '');
+        // FIX: Ensure it's stored as string to preserve leading zeros
+        const whatsappNumber = String(settings.data?.BusinessWhatsAppNumber || '').trim();
+        setBusinessWhatsAppNumber(whatsappNumber);
       } catch (error) {
         console.error('Error fetching business WhatsApp number:', error);
       }
@@ -180,11 +183,12 @@ export default function CartPage() {
         const { success, orderNumber } = await saveOrderToMySQL('');
         
         if (success) {
-          // Then open WhatsApp
+          // Then open WhatsApp with properly formatted number
           clearCart();
-         
           const message = generateCartMessage(orderNumber);
-          window.open(`https://wa.me/${businessWhatsAppNumber}?text=${encodeURIComponent(message)}`, '_blank');
+          // FIX: Ensure WhatsApp number preserves leading zeros and removes non-digit characters
+          const formattedNumber = String(businessWhatsAppNumber).trim().replace(/\D/g, '');
+          window.open(`https://wa.me/${formattedNumber}?text=${encodeURIComponent(message)}`, '_blank');
         } else {
           setSnackbarMessage('Failed to save order. Please try again.');
           setSnackbarSeverity('error');
