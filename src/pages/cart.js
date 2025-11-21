@@ -30,7 +30,7 @@ const apiService = {
       },
       body: JSON.stringify(orderData),
     });
-    
+   
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`Failed to create order: ${response.status} - ${errorText}`);
@@ -78,6 +78,11 @@ export default function CartPage() {
         const settings = await apiService.getSettings();
         // FIX: Ensure it's stored as string to preserve leading zeros
         const whatsappNumber = String(settings.data?.BusinessWhatsAppNumber || '').trim();
+
+      //    setSnackbarMessage('Whatsapp numnerer fetched: ' + whatsappNumber);
+      // setSnackbarSeverity('warning');
+      // setSnackbarOpen(true);
+
         setBusinessWhatsAppNumber(whatsappNumber);
       } catch (error) {
         console.error('Error fetching business WhatsApp number:', error);
@@ -124,8 +129,8 @@ export default function CartPage() {
   // Save order to MySQL via API
   const saveOrderToMySQL = async (customerMobile) => {
     try {
-      const orderNumber = await generateOrderNumber();
-      
+      const orderNumber = await generateOrderNumber(); 
+   
       const orderDetails = {
         order_number: orderNumber,
         order_details: generateCartMessage(orderNumber),
@@ -147,6 +152,8 @@ export default function CartPage() {
       };
 
       const result = await apiService.createOrder(orderDetails);
+
+ 
       
       if (result.success) {
         return { success: true, orderNumber: result.order_number || orderNumber };
@@ -179,24 +186,27 @@ export default function CartPage() {
     if (isMobile) {
       // On mobile with WhatsApp - proceed directly
       try {
-        // First save the order
-        const { success, orderNumber } = await saveOrderToMySQL('');
-        
-        if (success) {
-          // Then open WhatsApp with properly formatted number
-          clearCart();
-          const message = generateCartMessage(orderNumber);
-          // FIX: Ensure WhatsApp number preserves leading zeros and removes non-digit characters
+
+    //  First save the order
+        const { success, orderNumber } = await saveOrderToMySQL('');  
+         clearCart();
+          const message = generateCartMessage(orderNumber); 
           const formattedNumber = String(businessWhatsAppNumber).trim().replace(/\D/g, '');
           window.open(`https://wa.me/${formattedNumber}?text=${encodeURIComponent(message)}`, '_blank');
-        } else {
-          setSnackbarMessage('Failed to save order. Please try again.');
-          setSnackbarSeverity('error');
-          setSnackbarOpen(true);
-        }
+
+
+   
+        
+        // if (success) { 
+         
+        // } else {
+        //   setSnackbarMessage('Failed to save order. Please try again.');
+        //   setSnackbarSeverity('error');
+        //   setSnackbarOpen(true);
+        // }
       } catch (error) {
         console.error('Error processing order:', error);
-        setSnackbarMessage('Error processing order. Please try again.');
+        setSnackbarMessage('Error processing order. Please try again.' + error);
         setSnackbarSeverity('error');
         setSnackbarOpen(true);
       }

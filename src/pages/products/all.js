@@ -77,6 +77,7 @@ const apiService = {
 
   // Orders API
   async createOrder(orderData) {
+     
     const response = await fetch(`${API_BASE_URL}/orders.php`, {
       method: 'POST',
       headers: {
@@ -84,22 +85,21 @@ const apiService = {
       },
       body: JSON.stringify(orderData),
     });
-    
+   
     if (!response.ok) throw new Error('Failed to create order');
     const data = await response.json();
     return data;
   },
 
   // Settings API (you'll need to create this)
-  async getSettings() {
-    // For now, return a default WhatsApp number
-    // You'll need to create a settings API endpoint
-    return {
-      BusinessWhatsAppNumber: '1234567890' // Replace with actual number from your database
-    };
+ async getSettings() {
+    const response = await fetch(`${API_BASE_URL}/settings.php`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch settings');
+    }
+    return await response.json();
   }
 };
-
 // Styled components (unchanged)
 const BlinkingButton = styled(Button)(({ theme }) => ({
   position: 'fixed',
@@ -426,7 +426,8 @@ export default function ProductPage() {
     const fetchBusinessNumber = async () => {
       try {
         const settings = await apiService.getSettings();
-        setBusinessWhatsAppNumber(settings.BusinessWhatsAppNumber || '');
+         const whatsappNumber = String(settings.data?.BusinessWhatsAppNumber || '').trim();
+        setBusinessWhatsAppNumber(whatsappNumber);
       } catch (error) {
         console.error('Error fetching business WhatsApp number:', error);
       }
@@ -475,6 +476,8 @@ export default function ProductPage() {
       };
 
       const result = await apiService.createOrder(orderDetails);
+
+    
       
       if (result.success) {
         return { success: true, orderNumber };
@@ -508,21 +511,23 @@ export default function ProductPage() {
       // On mobile with WhatsApp - proceed directly
       try {
         // First save the order
-        const { success, orderNumber } = await saveOrderToMySQL('');
-        
-        if (success) {
-          // Then open WhatsApp
+         const { success, orderNumber } = await saveOrderToMySQL('');
+
           clearCart();
           const message = generateCartMessage(orderNumber);
           window.open(`https://wa.me/${String(businessWhatsAppNumber).trim()}?text=${encodeURIComponent(message)}`, '_blank');
-        } else {
-          setSnackbarMessage('Failed to save order. Please try again.');
-          setSnackbarSeverity('error');
-          setSnackbarOpen(true);
-        }
+        
+        // if (success) {
+        //   // Then open WhatsApp
+        
+        // } else {
+        //   setSnackbarMessage('Failed to save order. Please try again.');
+        //   setSnackbarSeverity('error');
+        //   setSnackbarOpen(true);
+        // }
       } catch (error) {
         console.error('Error processing order:', error);
-        setSnackbarMessage('Error processing order. Please try again.');
+        setSnackbarMessage('Error processing order. Please try again.' + error);
         setSnackbarSeverity('error');
         setSnackbarOpen(true);
       }
