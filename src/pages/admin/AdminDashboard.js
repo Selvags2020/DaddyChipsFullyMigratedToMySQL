@@ -81,10 +81,12 @@ const AdminHeader = styled(Box)(({ theme }) => ({
   padding: theme.spacing(2),
   backgroundColor: theme.palette.background.paper,
   borderBottom: `1px solid ${theme.palette.divider}`,
-  height: '64px',
+  minHeight: '64px',
   position: 'sticky',
   top: 0,
-  zIndex: theme.zIndex.appBar
+  zIndex: theme.zIndex.appBar,
+  width: '100%',
+  boxSizing: 'border-box'
 }));
 
 const AdminContent = styled(Box)(({ theme }) => ({
@@ -94,6 +96,9 @@ const AdminContent = styled(Box)(({ theme }) => ({
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen
   }),
+  width: '100%',
+  boxSizing: 'border-box',
+  overflowX: 'hidden',
   [theme.breakpoints.down('sm')]: {
     padding: theme.spacing(1),
     marginLeft: '0 !important'
@@ -140,6 +145,52 @@ const DetailItem = styled(Box)(({ theme }) => ({
   '& svg': {
     marginRight: theme.spacing(1),
     color: theme.palette.text.secondary
+  }
+}));
+
+const MainContainer = styled(Box)({
+  display: 'flex',
+  minHeight: '100vh',
+  backgroundColor: '#f5f7fa',
+  width: '100%',
+  overflowX: 'hidden'
+});
+
+const ContentWrapper = styled(Box)(({ theme, isMobile, drawerCollapsed }) => ({
+  flexGrow: 1,
+  marginLeft: isMobile ? 0 : drawerCollapsed ? '56px' : '240px',
+  transition: theme.transitions.create('margin', {
+    easing: theme.transitions.easing.sharp,
+    duration: theme.transitions.duration.leavingScreen,
+  }),
+  width: isMobile ? '100%' : `calc(100% - ${drawerCollapsed ? '56px' : '240px'})`,
+  maxWidth: '100%',
+  overflowX: 'hidden'
+}));
+
+const OrdersGrid = styled(Box)(({ theme }) => ({
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+  gap: theme.spacing(2),
+  width: '100%',
+  maxWidth: '100%',
+  boxSizing: 'border-box',
+  
+  [theme.breakpoints.down('sm')]: {
+    gridTemplateColumns: '1fr',
+    gap: theme.spacing(1)
+  },
+  
+  [theme.breakpoints.between('sm', 'md')]: {
+    gridTemplateColumns: 'repeat(2, 1fr)',
+  },
+  
+  [theme.breakpoints.between('md', 'lg')]: {
+    gridTemplateColumns: 'repeat(3, 1fr)',
+  },
+  
+  [theme.breakpoints.up('lg')]: {
+    gridTemplateColumns: 'repeat(4, 1fr)',
   }
 }));
 
@@ -523,15 +574,15 @@ export default function AdminDashboard() {
 
   // Drawer content
   const drawer = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ p: 2, textAlign: 'center', borderBottom: `1px solid ${theme.palette.divider}` }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', width: '100%' }}>
+      <Box sx={{ p: 2, textAlign: 'center', borderBottom: `1px solid ${theme.palette.divider}`, width: '100%', boxSizing: 'border-box' }}>
         <Collapse in={!drawerCollapsed} orientation="horizontal">
           <Typography variant="h6" sx={{ fontWeight: 'bold', color: theme.palette.primary.main }}>
             Admin Dashboard
           </Typography>
         </Collapse>
       </Box>
-      <List sx={{ flexGrow: 1 }}>
+      <List sx={{ flexGrow: 1, width: '100%' }}>
         <MenuListItem 
           button 
           selected={activeMenu === 'orders'}
@@ -611,7 +662,7 @@ export default function AdminDashboard() {
           </Collapse>
         </MenuListItem>
       </List>
-      <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+      <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}`, width: '100%', boxSizing: 'border-box' }}>
         <Button 
           fullWidth 
           variant="outlined" 
@@ -626,7 +677,7 @@ export default function AdminDashboard() {
   );
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f7fa' }}>
+    <MainContainer>
       {/* Mobile Drawer */}
       <Drawer
         variant="temporary"
@@ -640,6 +691,8 @@ export default function AdminDashboard() {
               easing: theme.transitions.easing.sharp,
               duration: theme.transitions.duration.leavingScreen,
             }),
+            boxSizing: 'border-box',
+            overflowX: 'hidden'
           }
         }}
       >
@@ -659,20 +712,14 @@ export default function AdminDashboard() {
               easing: theme.transitions.easing.sharp,
               duration: theme.transitions.duration.leavingScreen,
             }),
+            boxSizing: 'border-box'
           }
         }}
       >
         {drawer}
       </Drawer>
       
-      <Box sx={{ 
-        flexGrow: 1,
-        marginLeft: isMobile ? 0 : drawerCollapsed ? '56px' : '240px',
-        transition: theme.transitions.create('margin', {
-          easing: theme.transitions.easing.sharp,
-          duration: theme.transitions.duration.leavingScreen,
-        }),
-      }}>
+      <ContentWrapper isMobile={isMobile} drawerCollapsed={drawerCollapsed}>
         {/* Header */}
         <AdminHeader>
           {isMobile ? (
@@ -713,33 +760,36 @@ export default function AdminDashboard() {
                 justifyContent: 'space-between', 
                 alignItems: { xs: 'flex-start', sm: 'center' },
                 mb: 2,
-                gap: 1
+                gap: 1,
+                width: '100%'
               }}>
-                <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                <Typography variant="h5" sx={{ fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '1.75rem' } }}>
                   Recent Orders
                 </Typography>
-                <Stack direction="row" spacing={1} sx={{ width: { xs: '100%', sm: 'auto' } }}>
-                  <StatusChip 
-                    status="New" 
-                    active={filter === 'New'}
-                    onClick={() => setFilter('New')}
-                    icon={<FiberNewIcon fontSize="small" />} 
-                    label={`New (${orderCounts.new})`} 
-                  />
-                  <StatusChip 
-                    status="Delivered" 
-                    active={filter === 'Delivered'}
-                    onClick={() => setFilter('Delivered')}
-                    icon={<LocalShippingIcon fontSize="small" />} 
-                    label={`Delivered (${orderCounts.delivered})`} 
-                  />
-                  <StatusChip 
-                    status="All" 
-                    active={filter === 'All'}
-                    onClick={() => setFilter('All')}
-                    icon={<ShoppingCartIcon fontSize="small" />} 
-                    label={`All (${orderCounts.total})`} 
-                  />
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ width: { xs: '100%', sm: 'auto' } }}>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    <StatusChip 
+                      status="New" 
+                      active={filter === 'New'}
+                      onClick={() => setFilter('New')}
+                      icon={<FiberNewIcon fontSize="small" />} 
+                      label={`New (${orderCounts.new})`} 
+                    />
+                    <StatusChip 
+                      status="Delivered" 
+                      active={filter === 'Delivered'}
+                      onClick={() => setFilter('Delivered')}
+                      icon={<LocalShippingIcon fontSize="small" />} 
+                      label={`Delivered (${orderCounts.delivered})`} 
+                    />
+                    <StatusChip 
+                      status="All" 
+                      active={filter === 'All'}
+                      onClick={() => setFilter('All')}
+                      icon={<ShoppingCartIcon fontSize="small" />} 
+                      label={`All (${orderCounts.total})`} 
+                    />
+                  </Box>
                   <Button 
                     variant="contained" 
                     color="success" 
@@ -747,13 +797,14 @@ export default function AdminDashboard() {
                     onClick={exportToExcel}
                     disabled={exportLoading}
                     size="small"
+                    sx={{ minWidth: '100px' }}
                   >
                     {exportLoading ? 'Exporting...' : 'Export'}
                   </Button>
                 </Stack>
               </Box>
               
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, width: '100%' }}>
                 {filter === 'New' && filteredOrders.length > 0 ? 
                   "All new orders are displayed here" : 
                   filter === 'Delivered' && filteredOrders.length > 0 ?
@@ -764,33 +815,23 @@ export default function AdminDashboard() {
               </Typography>
               
               {loading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', width: '100%' }}>
                   <CircularProgress />
                   <Typography sx={{ ml: 2 }}>Loading orders...</Typography>
                 </Box>
               ) : filteredOrders.length === 0 ? (
-                <Box sx={{ textAlign: 'center', py: 8 }}>
+                <Box sx={{ textAlign: 'center', py: 8, width: '100%' }}>
                   <Typography variant="h6" sx={{ mb: 2 }}>No orders found</Typography>
                   <Typography variant="body1" color="text.secondary">
                     There are no orders matching the current filter
                   </Typography>
                 </Box>
               ) : (
-                <Box sx={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: { 
-                    xs: '1fr', 
-                    sm: 'repeat(auto-fill, minmax(240px, 1fr))', 
-                    md: 'repeat(auto-fill, minmax(220px, 1fr))',
-                    lg: 'repeat(auto-fill, minmax(200px, 1fr))'
-                  }, 
-                  gap: 1.5,
-                  paddingRight: { xs: 1, sm: 0 }
-                }}>
+                <OrdersGrid>
                   {filteredOrders.map((order) => (
                     <AdminCard key={order.order_id} status={order.status}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.5 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', fontSize: '0.9rem', wordBreak: 'break-word' }}>
                           Order #{order.order_number}
                         </Typography>
                         <StatusChip status={order.status} label={order.status} size="small" />
@@ -798,7 +839,7 @@ export default function AdminDashboard() {
                       
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
                         <PhoneIcon color="action" sx={{ mr: 0.5, fontSize: '1rem' }} />
-                        <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                        <Typography variant="body2" sx={{ fontSize: '0.8rem', wordBreak: 'break-word' }}>
                           {order.customer_mobile_number || 'No contact'}
                         </Typography>
                       </Box>
@@ -811,16 +852,15 @@ export default function AdminDashboard() {
                       </Box>
                       
                       {order.status === 'Delivered' && order.remarks && (
-                        <Typography variant="body2" sx={{ mb: 0.5, fontStyle: 'italic', fontSize: '0.75rem' }}>
+                        <Typography variant="body2" sx={{ mb: 0.5, fontStyle: 'italic', fontSize: '0.75rem', wordBreak: 'break-word' }}>
                           <strong>Remarks:</strong> {order.remarks}
                         </Typography>
                       )}
                       
-                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 'auto' }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 'auto', flexWrap: 'wrap', gap: 0.5 }}>
                         <Tooltip title="View order details">
                           <IconButton 
                             size="small"
-                            sx={{ mr: 0.5 }}
                             onClick={() => handleOpenOrderDetails(order)}
                           >
                             <InfoIcon color="info" fontSize="small" />
@@ -829,7 +869,6 @@ export default function AdminDashboard() {
                         <Tooltip title="Edit order">
                           <IconButton 
                             size="small"
-                            sx={{ mr: 0.5 }}
                             onClick={() => handleOpenEditOrder(order)}
                           >
                             <EditIcon color="action" fontSize="small" />
@@ -849,12 +888,12 @@ export default function AdminDashboard() {
                       </Box>
                     </AdminCard>
                   ))}
-                </Box>
+                </OrdersGrid>
               )}
             </>
           )}
         </AdminContent>
-      </Box>
+      </ContentWrapper>
 
       {/* Order Details Dialog */}
       <Dialog
@@ -862,6 +901,7 @@ export default function AdminDashboard() {
         onClose={handleCloseOrderDetails}
         maxWidth="md"
         fullWidth
+        fullScreen={isMobile}
       >
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -912,7 +952,7 @@ export default function AdminDashboard() {
           </Box>
           
           <Typography variant="h6" sx={{ mb: 1 }}>Order Items:</Typography>
-          <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
+          <Typography variant="body1" sx={{ whiteSpace: 'pre-line', wordBreak: 'break-word' }}>
             {selectedOrder?.order_details || 'No order details available'}
           </Typography>
         </DialogContent>
@@ -929,6 +969,7 @@ export default function AdminDashboard() {
         onClose={handleCloseMarkDelivered}
         maxWidth="sm"
         fullWidth
+        fullScreen={isMobile}
       >
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -974,6 +1015,7 @@ export default function AdminDashboard() {
         onClose={handleCloseEditOrder}
         maxWidth="md"
         fullWidth
+        fullScreen={isMobile}
       >
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -1040,6 +1082,6 @@ export default function AdminDashboard() {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </MainContainer>
   );
 }
